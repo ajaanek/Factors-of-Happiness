@@ -1,0 +1,115 @@
+---
+title: "Factors of Happiness"
+subtitle: "by Ajaane Kanagasbai"
+output: html_notebook
+---
+
+## Introduction 
+The data set I used is the World Happiness Report from Kaggle, specifically the 2019 data. I chose this data set to try to find out the answer to the age-old question: what is the key to happiness? This data set includes the happiness scores and rankings from the Gallup World Poll, as well as different potential factors such as GDP per capita, healthy life expectancy, trust in government, freedom, social support, etc [[2]](https://en.wikipedia.org/wiki/World_Happiness_Report). Using this information, I will attempt to find which factors are most important for living a happy life so that individuals can focus on improving what will most likely make them happy. To do this, I will find out which parts of the world are the most happy, then any potential factors that might contribute to their higher happiness. 
+
+I must note that the data is not entirely accurate. There are concerns due to the metrics and collection of data [[2]](https://en.wikipedia.org/wiki/World_Happiness_Report#Criticism). Metrics are different across the globe and can be influenced by things such as the way their country's education system grades assessments. In addition, data collection is not equally distributed among continents so that may skew the results. 
+
+First, let's take a look at the untouched data:
+
+```{r, message=FALSE, show_col_types = FALSE}
+library(readr)
+library(tidyverse)
+library(dplyr)
+library(countrycode)
+library(terra)
+library(geodata)
+library(patchwork)
+library(maps)
+library(socviz)
+library(ggthemes)
+library(gridExtra)
+library(patchwork)
+library(GGally)
+data <- read_csv("C:/Users/Ajaan/OneDrive/Documents/4210U/Assignment/WorldHappinessReport/2019.csv")
+head(data)
+
+```
+
+Before using the data for visualization, I need to clean it and make a few changes. I changed some of the column names and added a column which describes the continent that the country is in. It is important to note that the countryCode package that I used to add the continent column combines North America and South America as "America".
+```{r, message=FALSE, show_col_types = FALSE}
+#Changing the column names to something easier to use
+data <- data |> rename(Rank = 'Overall rank', Country_or_Region = 'Country or region', GDP_Per_Capita = "GDP per capita", Social_Support = "Social support", Life_Expectancy = "Healthy life expectancy", Freedom  = "Freedom to make life choices", Corruption = "Perceptions of corruption")
+
+#Adding a continent column using the country Code package
+data <- mutate(data, Continent = countrycode(sourcevar = data$Country_or_Region, origin = "country.name", destination = "continent"))
+#Reordering columns
+data <- data[, c(1,3, 10, 2, 4, 6, 7, 5, 8, 9)] 
+data <- na.omit(data)
+head(data)
+```
+
+
+
+First let's take a look at what populations tend to be the happiest:
+```{r, message=FALSE, show_col_types = FALSE}
+ggplot(data[1:10,], aes(x = Country_or_Region, y = Score)) + 
+  geom_bar(aes(fill=Continent), stat='identity') + labs(x = "Country/Region",
+  y = "Happiness Score", title = "Top 10 Happiest Countries", subtitle = "Fig. 1") + theme(plot.title = element_text(face = "bold", hjust = 0.5, size=14), panel.background = element_rect(fill="white", colour="black", linewidth = 2), panel.grid.major = element_line(colour = "gray"),
+        axis.text.x=element_text(angle=-45, vjust=0.5, size=10),
+        legend.title = element_text(face="bold", size = 8))
+```
+As we can see, European countries dominate the top 10 happiest countries, with 8 of the 10 being European countries. However, this may not give the whole picture. Let's use a box plot to plot the average happiness score for each continent:
+
+```{r, message=FALSE, show_col_types = FALSE}
+continent_data <- data |> group_by(Continent) 
+ggplot(continent_data, aes(x = Continent, y = Score)) + geom_boxplot(aes(fill=Continent)) + labs(title = "Average Happiness by Continent", , subtitle = "Fig. 2") + theme(plot.title = element_text(face = "bold.italic", hjust = 0.5, size=12), axis.text.x=element_text(angle=-45, vjust=0.5, size=10),legend.title = element_text(face="bold", size = 8))
+```
+The highest average happiness score belongs to Oceania, followed by Europe, America, Asia, then Africa. However, as I mentioned before, this may be skewed due to the amount of data collected from each continent. For example, only 2 countries were surveyed from the continent of Oceania as seen below. 
+
+```{r}
+sum(data$Continent == "Oceania")
+```
+
+
+```{r, message=FALSE, show_col_types = FALSE}
+world_map <- map_data("world")
+continent_data <- continent_data |> rename(region = 'Country_or_Region')
+score.map <- left_join(continent_data, world_map, by = "region")
+
+region.lab.data <- score.map |> group_by(Continent) |> summarise(long = mean(long, na.rm = TRUE), lat = mean(lat, na.rm = TRUE)) 
+
+
+
+ggplot(score.map, aes(x = long, y = lat)) + geom_polygon(aes( group = group, fill = Score))+  theme_map() + geom_label(data = region.lab.data, aes(label = Continent), size = 3, hjust = 0.5) + scale_fill_viridis_c(option = "C") + labs(title = "Happiness Score Mapped", x = "Longitude",
+  y = "Latitude", fill = "Happiness Score", subtitle = "Fig. 3") + theme(plot.title = element_text(face = "bold.italic", hjust = 0.5, size=12),  
+        legend.title = element_text(face="bold", size = 8)) + theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(), panel.background = element_rect(fill="lightblue"),legend.background = element_rect(fill="lightblue", size = 1), legend.box.spacing = unit(1.0, 'cm'), legend.position = c(0.02, 0.01)) 
+```
+Certain countries of Europe have the highest happiness score, followed by Oceania and North America as seen on the map. On the other hand Africa and Asia have some of the lowest happiness scores.
+
+
+Now that we've seen which populations are the happiest, let's look at the factors that may contribute to their happiness levels. 
+
+```{r}
+data_cor <- data |> select(-Rank, -Continent, -Country_or_Region) |> rename("GDP Per Capita" = "GDP_Per_Capita", "Life Expectancy" = "Life_Expectancy", "Social Support" = "Social_Support")
+round(cor(data_cor[,1:6]), digits = 3)
+ggcorr(data_cor, label = TRUE,  digits = 3, high = "lightgreen",low = "red",  hjust = 0.8) + labs(title = "Correlation of Variables", subtitle = "Fig. 4") + theme(plot.title = element_text(face = "bold", hjust = 1))
+```
+As we can see from the correlation matrix above, GDP/Capita, Life Expectancy and Social Support are the most influential factors of happiness, with Freedom and Trust in Government following. Meanwhile, generosity is the least correlated with happiness. 
+with that in mind
+Let's see how each of these factors are reflected in the happiness score of each continent:
+
+```{r}
+avg_by_continent <- data |> select(-Score, -Rank, -Country_or_Region) |> group_by(Continent) |> summarise_if(is.numeric, mean)
+
+avg_melt <- melt(avg_by_continent, id.vars = "Continent")
+
+ggplot(avg_melt, aes(y=value, x=Continent, color=Continent, fill=Continent)) + geom_bar( stat="identity") + facet_wrap(~variable) + theme(axis.text.x = element_text(angle = 90)) + labs(title = "Average of Each Factor by Continent", y = "Average Value", subtitle = "Fig. 5") + scale_fill_viridis_d() + theme(plot.title = element_text(face = "bold.italic", hjust = 0.5, size=12), axis.title.x = element_text(vjust=-1), axis.ticks = element_line(colour = "grey70", linewidth = 0.2), plot.background = element_rect(fill="linen", colour="black", linewidth = 2), panel.grid.minor = element_line(colour = "gray"), panel.grid.major = element_blank(), legend.key = element_rect( colour = "linen"), legend.key.width = unit(0.75, "cm"), legend.key.height = unit(0.75, "cm"), legend.title = element_text(face="bold", size = 8), legend.background = element_rect(fill="linen", colour = "grey50", size = 1))
+
+```
+We can see that Oceania is leading on all factors. This makes sense considering Oceania has the highest happiness score. Europe is second for almost all factors. The Americas is higher than Asia in social support, life expectancy, and freedom, while Asia is higher in Generosity and trust in government. If all factors influenced happiness by the same amount, you might expect Asia and the America's happiness scores to more similar. Since generosity and trust in government impact happiness less, the gap between the two widens. Africa is rated the lowest on almost all factors, contributing to the lowest happiness score. 
+
+# Conclusion
+From analyzing the data, we could see that Oceania and Europe have some of the happiest populations in the world. Some of the contributing factors are: GDP per capita, Life Expectancy and Social Support. 
+
+
+
+# References
+[1] Dataset - https://www.kaggle.com/datasets/unsdsn/world-happiness?resource=download
+
+
+[2] World Happiness Report - https://en.wikipedia.org/wiki/World_Happiness_Report 
